@@ -9,7 +9,10 @@ module Nanograd
     forwardTrace,
     showNetwork,
     backward,
-    update
+    update,
+    mkNeuron,
+    mkDenseLayer,
+    trainStep
   ) where
 
 import Data.List (intercalate, scanl', transpose, mapAccumR)
@@ -78,7 +81,7 @@ backwardActivation activation input upstream = zipWith (*) upstream derivatives
 
 backwardDense :: [Neuron] -> InputVector -> UpstreamGradient -> (DownstreamGradient, LayerGradient)
 backwardDense neurons input upstream =
-  let gradForNeuron up_err neuron =
+  let gradForNeuron up_err _neuron =
         let w_grad = map (* up_err) input
             b_grad = up_err
         in Neuron w_grad b_grad
@@ -107,8 +110,38 @@ update :: Network -> [Maybe LayerGradient] -> Double -> Network
 update network gradients learningRate = zipWith updateLayerGradient network gradients
   where updateLayerGradient :: Layer -> Maybe LayerGradient -> Layer
         updateLayerGradient (DenseLayer neurons) (Just grad_neurons) = DenseLayer (zipWith (updateNeuron) neurons grad_neurons)
+        updateLayerGradient layer@(ActivationLayer _) (Just _) = layer
         updateLayerGradient layer Nothing = layer
         updateNeuron :: Neuron -> Neuron -> Neuron
         updateNeuron neuron grad_neuron = Neuron newWeights newBias
           where newWeights = zipWith (\w dw -> w - learningRate * dw) (weights neuron) (weights grad_neuron)
                 newBias = bias neuron - learningRate * (bias grad_neuron)
+
+mkNeuron :: Int -> [Double] -> (Neuron, [Double])
+mkNeuron numInputs randoms = (neuron, remainingRandoms)
+  where
+    (neuronRandoms, remainingRandoms) = splitAt (numInputs + 1) randoms
+    neuronWeights = take numInputs neuronRandoms
+    neuronBias = head (drop numInputs neuronRandoms)
+    neuron = Neuron { weights = neuronWeights, bias = neuronBias }
+
+mkDenseLayer :: Int -> Int -> [Double] -> (Layer, [Double])
+mkDenseLayer numInputsPerNeuron numNeurons randoms = (DenseLayer neurons, finalRandoms)
+  where
+    buildNeurons :: Int -> [Double] -> ([Neuron], [Double])
+    buildNeurons 0 rands = ([], rands)
+    buildNeurons n rands = 
+      let
+        (neuron, rands') = mkNeuron numInputsPerNeuron rands
+        (restOfNeurons, rands'') = buildNeurons (n - 1) rands'
+      in (neuron : restOfNeurons, rands'')
+    (neurons, finalRandoms) = buildNeurons numNeurons randoms
+
+
+trainStep :: Network -> InputVector -> OutputVector -> Double -> Network
+trainStep net input target lr =
+  let trace = forwardTrace net input
+      predicted = last trace
+      initialGradient = zipWith (-) predicted target
+      (_, gradients) = backward net trace initialGradient
+  in update net gradients lr
