@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric     #-}
 -- TODO: add ReLU and Softmax activations
+-- TODO: actual batching
+-- TODO: real train-test-validation split
 
 module Main where
 
