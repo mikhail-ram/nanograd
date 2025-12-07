@@ -1,6 +1,6 @@
 # nanograd
 
-`nanograd` is a lightweight, zero-dependency neural network library in Haskell, inspired by Andrej Karpathy's `micrograd`. It provides the foundational components for building and training simple neural networks with a clear, functional API.
+`nanograd` is a lightweight, zero-dependency neural network library in Haskell, inspired by Andrej Karpathy's `micrograd`. It provides the foundational components for building and training simple neural networks in Haskell with a clear, functional API.
 
 ## Core Concepts
 
@@ -28,4 +28,16 @@ cabal build
 
 # Run the XOR example
 cabal run xor
+
+# Run the Iris example
+cabal run iris
 ```
+
+## Todos:
+- [x] proof-of-concept for XOR
+- [x] proof-of-concept for iris classification
+- [ ] ReLU and Softmax activations
+- [ ] batching
+- [ ] train-test-validation split
+- [ ] optimizers - momentum
+- [ ] convolutions
