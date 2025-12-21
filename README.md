@@ -36,6 +36,8 @@ cabal run iris
 ## Todos:
 - [x] proof-of-concept for XOR
 - [x] proof-of-concept for iris classification
+- [ ] efficient n-dimensional tensors
+- [ ] Grenade-style dependent types
 - [ ] ReLU and Softmax activations
 - [ ] batching
 - [ ] train-test-validation split

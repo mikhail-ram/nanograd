@@ -12,6 +12,7 @@ import Data.Csv
 import Data.List (foldl', elemIndex)
 import GHC.Generics (Generic)
 import System.Random (newStdGen, randomRs)
+import qualified Data.Massiv.Array as M
 import Nanograd
 
 data IrisRecord = IrisRecord
@@ -25,14 +26,15 @@ data IrisRecord = IrisRecord
 instance FromRecord IrisRecord
 
 irisClassToOneHot :: String -> OutputVector
-irisClassToOneHot "Iris-setosa"     = [1.0, 0.0, 0.0]
-irisClassToOneHot "Iris-versicolor" = [0.0, 1.0, 0.0]
-irisClassToOneHot "Iris-virginica"  = [0.0, 0.0, 1.0]
+irisClassToOneHot "Iris-setosa"     = M.fromList M.Seq [1.0, 0.0, 0.0]
+irisClassToOneHot "Iris-versicolor" = M.fromList M.Seq [0.0, 1.0, 0.0]
+irisClassToOneHot "Iris-virginica"  = M.fromList M.Seq [0.0, 0.0, 1.0]
 irisClassToOneHot _                 = error "Unknown Iris class"
 
 irisRecordToVectors :: IrisRecord -> (InputVector, OutputVector)
 irisRecordToVectors r =
-  ( [ sepalLength r
+  (M.fromList M.Seq
+    [ sepalLength r
     , sepalWidth r
     , petalLength r
     , petalWidth r
@@ -96,8 +98,8 @@ main = do
         results = map (\(input, target) ->
             let
               predictedRaw = forward trainedNet input
-              predictedClass = indexOfMax predictedRaw 
-              actualClass = indexOfMax target
+              predictedClass = indexOfMax (M.toList predictedRaw)
+              actualClass = indexOfMax (M.toList target)
             in (predictedClass, actualClass)
           ) testData
         correctPredictions = length [() | (Just p, Just a) <- results, p == a] 

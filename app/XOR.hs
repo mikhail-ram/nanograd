@@ -2,6 +2,7 @@ module Main where
 
 import Data.List (foldl')
 import System.Random (newStdGen, randomRs)
+import qualified Data.Massiv.Array as M
 import Nanograd
 
 -- Network Architecture
@@ -23,8 +24,14 @@ initialNetwork = do
 xorInputs :: [[Double]]
 xorInputs = [[0, 0], [0, 1], [1, 0], [1, 1]]
 
+xorInputsTensor :: [InputVector]
+xorInputsTensor = map (M.fromList M.Seq) xorInputs
+
 xorTargets :: [[Double]]
 xorTargets = [[0], [1], [1], [0]]
+
+xorTargetsTensor :: [OutputVector]
+xorTargetsTensor = map (M.fromList M.Seq) xorTargets
 
 learningRate :: Double
 learningRate = 0.1
@@ -39,7 +46,7 @@ main = do
   print net
   putStrLn "\nTraining Network..."
   let
-    trainingData = cycle (zip xorInputs xorTargets)
+    trainingData = cycle (zip xorInputsTensor xorTargetsTensor)
     trainingCycle = take epochs trainingData
     trainedNet = foldl' (\n (input, target) -> trainStep n input target learningRate) net trainingCycle
   putStrLn "Training complete."
@@ -49,4 +56,4 @@ main = do
   mapM_ (\(input, target) -> do
     let output = forward trainedNet input
     putStrLn $ "Input: " ++ show input ++ ", Target: " ++ show target ++ ", Predicted: " ++ show output
-    ) (zip xorInputs xorTargets)
+    ) (zip xorInputsTensor xorTargetsTensor)

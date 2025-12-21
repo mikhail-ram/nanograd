@@ -16,8 +16,9 @@ module Nanograd
   ) where
 
 import Data.List (intercalate, scanl', transpose, mapAccumR)
+import qualified Data.Massiv.Array as M
 
-data Neuron = Neuron { weights :: [Double]
+data Neuron = Neuron { weights :: Tensor1D
                      , bias    :: Double
                      } deriving Show
 
@@ -38,9 +39,9 @@ getActivation Sigmoid = sigmoid
 
 type Network = [Layer]
 
-type Vector = [Double]
-type InputVector = Vector
-type OutputVector = Vector
+type Tensor1D = M.Array M.U M.Ix1 Double
+type InputVector = Tensor1D
+type OutputVector = Tensor1D
 
 showNetwork :: Network -> String
 showNetwork network = "[\n" ++ intercalate ",\n" (map show network) ++ "\n]"
@@ -55,11 +56,11 @@ sigmoid = Activation
   where sigmoidFunc x = 1 / (1 + exp (-x))
 
 forwardDense :: [Neuron] -> InputVector -> OutputVector
-forwardDense layer input = map forwardNeuron layer
-  where forwardNeuron neuron = sum (zipWith (*) input (weights neuron)) + (bias neuron)
+forwardDense layer input = M.fromList M.Seq (map forwardNeuron layer)
+  where forwardNeuron neuron = M.sum (M.zipWith (*) input (weights neuron)) + (bias neuron)
 
 forwardActivation :: Activation -> InputVector -> OutputVector
-forwardActivation activation = map (forwardPass activation)
+forwardActivation activation input = M.compute $ M.map (forwardPass activation) input
 
 forwardLayer :: Layer -> InputVector -> OutputVector
 forwardLayer (DenseLayer neurons) = forwardDense neurons
@@ -71,25 +72,27 @@ forwardTrace network input = scanl' (flip forwardLayer) input network
 forward :: Network -> InputVector -> OutputVector
 forward network = last . forwardTrace network
 
-type UpstreamGradient = [Double]
-type DownstreamGradient = [Double]
+type UpstreamGradient = Tensor1D
+type DownstreamGradient = Tensor1D
 type LayerGradient = [Neuron]
 
 backwardActivation :: Activation -> InputVector -> UpstreamGradient -> DownstreamGradient
-backwardActivation activation input upstream = zipWith (*) upstream derivatives
-  where derivatives = map (backwardPass activation) input
+backwardActivation activation input upstream = M.compute $ M.zipWith (*) upstream derivatives :: Tensor1D
+  where derivatives = M.compute $ M.map (backwardPass activation) input :: Tensor1D
 
 backwardDense :: [Neuron] -> InputVector -> UpstreamGradient -> (DownstreamGradient, LayerGradient)
 backwardDense neurons input upstream =
-  let gradForNeuron up_err _neuron =
-        let w_grad = map (* up_err) input
-            b_grad = up_err
-        in Neuron w_grad b_grad
-      layerGrads = zipWith (gradForNeuron) upstream neurons
-      weightsMatrix = map weights neurons -- [[current 1 to prev1, current 1 to prev2], neuron 2 weights, ...]
-      transposedWeights = transpose weightsMatrix -- [[current 1 to prev 1, current 2 to prev 1, ...], [current n to prev 2],...]
-      downstream = map (\prev_node_weights -> sum $ zipWith (*) upstream prev_node_weights) transposedWeights -- sum of multiplication of each output weight of previous single node to error caused in each layer node
-      in (downstream, layerGrads)
+  let
+    gradForNeuron up_err _neuron =
+      let
+        w_grad = M.compute $ M.map (* up_err) input
+        b_grad = up_err
+      in Neuron w_grad b_grad
+    layerGrads = zipWith (gradForNeuron) (M.toList upstream) neurons
+    weightsMatrix = map (M.toList . weights) neurons -- [[current 1 to prev1, current 1 to prev2], neuron 2 weights, ...]
+    transposedWeights = transpose weightsMatrix -- [[current 1 to prev 1, current 2 to prev 1, ...], [current n to prev 2],...]
+    downstream = M.fromList M.Seq $ map (\prev_node_weights -> let zipped = (M.compute $ M.zipWith (*) upstream ((M.fromList M.Seq prev_node_weights) :: Tensor1D)) :: Tensor1D in M.sum zipped) transposedWeights :: Tensor1D -- sum of multiplication of each output weight of previous single node to error caused in each layer node
+  in (downstream, layerGrads)
 
 backwardLayer :: Layer -> InputVector -> UpstreamGradient -> (DownstreamGradient, Maybe LayerGradient)
 backwardLayer (DenseLayer neurons) input upstream = (downstream, Just layerGrad)
@@ -114,14 +117,14 @@ update network gradients learningRate = zipWith updateLayerGradient network grad
         updateLayerGradient layer Nothing = layer
         updateNeuron :: Neuron -> Neuron -> Neuron
         updateNeuron neuron grad_neuron = Neuron newWeights newBias
-          where newWeights = zipWith (\w dw -> w - learningRate * dw) (weights neuron) (weights grad_neuron)
+          where newWeights = M.compute $ M.zipWith (\w dw -> w - learningRate * dw) (weights neuron) (weights grad_neuron)
                 newBias = bias neuron - learningRate * (bias grad_neuron)
 
 mkNeuron :: Int -> [Double] -> (Neuron, [Double])
 mkNeuron numInputs randoms = (neuron, remainingRandoms)
   where
     (neuronRandoms, remainingRandoms) = splitAt (numInputs + 1) randoms
-    neuronWeights = take numInputs neuronRandoms
+    neuronWeights = M.fromList M.Seq (take numInputs neuronRandoms)
     neuronBias = head (drop numInputs neuronRandoms)
     neuron = Neuron { weights = neuronWeights, bias = neuronBias }
 
@@ -142,6 +145,6 @@ trainStep :: Network -> InputVector -> OutputVector -> Double -> Network
 trainStep net input target lr =
   let trace = forwardTrace net input
       predicted = last trace
-      initialGradient = zipWith (-) predicted target
+      initialGradient = M.compute $ M.zipWith (-) predicted target
       (_, gradients) = backward net trace initialGradient
   in update net gradients lr
